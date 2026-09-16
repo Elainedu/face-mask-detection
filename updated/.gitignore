@@ -1,0 +1,22 @@
+# Model files
+*.pth
+*.pt
+*.bin
+*.safetensors
+*.h5
+
+# Large data files
+data/raw/
+data/processed/
+
+# Python
+__pycache__/
+*.pyc
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Results
+results/checkpoints/
+runs/
+wandb/
