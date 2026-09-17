@@ -1,13 +1,92 @@
 """
-Face Mask Detection - Gradio Demo
-互動式口罩偵測 Web 介面
+===============================================================================
+專案名稱: Face Mask Detection System - 口罩偵測系統
+===============================================================================
 
-這個程式會啟動一個網頁介面，讓你上傳圖片來偵測是否有戴口罩
+[專案簡介]
+這是一個使用深度學習技術的口罩配戴偵測系統，可以自動辨識圖片中的人臉，
+並判斷每個人是否有正確配戴口罩。系統結合了傳統電腦視覺（人臉偵測）和
+深度學習（口罩分類）技術，達到高準確率的即時偵測。
 
-用法:
-    python demo.py                                      # 使用預設模型
-    python demo.py --model results/models/vgg19_best_model.h5  # 指定模型
-    python demo.py --share                              # 產生公開分享連結
+[技術架構]
+- 人臉偵測: OpenCV Haar Cascade Classifier
+- 分類模型: Custom CNN / VGG19 Transfer Learning
+- 深度學習框架: TensorFlow/Keras
+- Web 介面: Gradio
+- 資料增強: ImageDataGenerator (旋轉、縮放、翻轉、亮度調整)
+
+[訓練資料]
+- 資料集: Kaggle Face Mask 12K Dataset
+- 類別: WITH MASK (有戴口罩) / WITHOUT MASK (沒戴口罩)
+- 訓練集: ~10,000 張圖片
+- 驗證集: ~2,000 張圖片
+
+[模型效能]
+- CNN 模型準確率: ~99.75%
+- VGG19 模型準確率: ~99.50%
+- 推論速度: < 1 秒/張 (CPU)
+- 支援多人臉同時偵測
+
+[主要功能]
+1. 自動人臉偵測 - 使用 Haar Cascade 快速定位人臉位置
+2. 口罩配戴分類 - 深度學習模型判斷是否配戴口罩
+3. 視覺化標註 - 在圖片上繪製偵測框和分類結果
+4. 信心度顯示 - 顯示模型預測的信心程度 (0-100%)
+5. 統計資訊 - 計算配戴/未配戴口罩的人數
+
+[啟動方式]
+基本啟動（使用預設 CNN 模型）:
+    python demo.py
+
+使用 VGG19 模型:
+    python demo.py --model results/models/vgg19_best_model.h5
+
+產生公開分享連結（可讓其他人透過網路訪問）:
+    python demo.py --share
+
+指定 Port:
+    python demo.py --port 8080
+
+[使用說明]
+1. 執行程式後，會在瀏覽器自動開啟 http://127.0.0.1:7860
+2. 點擊上傳區域選擇圖片（支援 JPG, PNG 等格式）
+3. 系統會自動進行以下處理：
+   - 偵測圖片中所有人臉
+   - 對每張臉判斷是否配戴口罩
+   - 繪製綠色框（有戴口罩）或紅色框（沒戴口罩）
+   - 顯示每張臉的分類結果和信心度
+4. 查看右側的統計資訊
+
+[面試展示重點]
+1. **技術深度**: 說明 VGG19 Transfer Learning 的原理和優勢
+2. **資料增強**: 解釋如何使用 ImageDataGenerator 增加訓練資料多樣性
+3. **預處理一致性**: 強調訓練和推論時的預處理必須一致（samplewise normalization）
+4. **實際應用**: 討論在疫情期間的實際應用場景（公共場所監控、門禁系統）
+5. **改進方向**: 可提及即時影片串流偵測、口罩配戴正確性判斷等進階功能
+
+[檔案結構]
+demo.py                          # 本檔案 - Gradio Web 展示介面
+train.py                         # 模型訓練程式
+train_vgg19.py                   # VGG19 遷移學習訓練程式
+results/models/                  # 訓練好的模型檔案
+    ├── cnn_best_model.h5       # 自訂 CNN 模型
+    └── vgg19_best_model.h5     # VGG19 模型
+data/                            # 資料集目錄（需自行下載）
+    ├── train/
+    └── validation/
+
+[注意事項]
+- 首次執行前需先訓練模型: python train.py
+- 人臉偵測在正面、光線充足的情況下效果最佳
+- 支援單張圖片多人臉偵測
+- 預處理時必須使用 samplewise normalization 以確保與訓練時一致
+
+[開發者]
+碩士班課程專案 - 深度學習
+建立日期: 2024
+更新日期: 2026-03-10 (修正 Gradio 6.0 相容性和預處理一致性)
+
+===============================================================================
 """
 # ==================== 匯入必要套件 ====================
 import argparse  # 處理命令列參數
@@ -38,7 +117,7 @@ class FaceMaskDetector:
         參數:
             model_path: 訓練好的模型檔案路徑 (.h5 檔案)
         """
-        print(f"📦 載入模型: {model_path}")
+        print(f"[LOAD] 載入模型: {model_path}")
 
         # ===== 1. 載入訓練好的口罩分類模型 =====
         # 這個模型可以判斷一張人臉圖片是否有戴口罩
@@ -72,10 +151,20 @@ class FaceMaskDetector:
         face_resized = cv2.resize(face_rgb, (256, 256))
 
         # ===== 步驟 3: 正規化像素值到 0~1 =====
-        # 原本是 0~255，除以 255 變成 0~1（和訓練時一樣）
+        # 原本是 0~255，除以 255 變成 0~1
         face_normalized = face_resized.astype('float32') / 255.0
 
-        # ===== 步驟 4: 增加 batch 維度 =====
+        # ===== 步驟 4: Samplewise 中心化和標準化 =====
+        # 訓練時使用了 samplewise_center 和 samplewise_std_normalization
+        # 所以預測時也要做一樣的處理
+        mean = np.mean(face_normalized)  # 計算平均值
+        std = np.std(face_normalized)    # 計算標準差
+        if std > 0:  # 避免除以 0
+            face_normalized = (face_normalized - mean) / std  # 中心化並標準化
+        else:
+            face_normalized = face_normalized - mean  # 只做中心化
+
+        # ===== 步驟 5: 增加 batch 維度 =====
         # 模型期望輸入是 (batch_size, height, width, channels)
         # 我們只有一張圖，所以 batch_size=1
         face_batch = np.expand_dims(face_normalized, axis=0)
@@ -226,28 +315,28 @@ def create_demo(model_path):
     # ===== 步驟 3: 建立 Gradio 介面 =====
     demo = gr.Interface(
         # --- 核心功能 ---
-        fn=detector.detect_and_classify,  # 當使用者上傳圖片時要呼叫的函數
+        fn=detector.detect_and_classify,
 
         # --- 輸入元件 ---
-        inputs=gr.Image(type="pil", label="上傳圖片"),  # 圖片上傳框
+        inputs=gr.Image(type="pil", label="上傳圖片"),
 
         # --- 輸出元件 ---
         outputs=[
-            gr.Image(type="numpy", label="偵測結果"),  # 顯示標註後的圖片
-            gr.Textbox(label="分析結果", lines=10)  # 顯示文字說明
+            gr.Image(type="numpy", label="偵測結果"),
+            gr.Textbox(label="分析結果", lines=10)
         ],
 
         # --- 介面外觀 ---
-        title="😷 Face Mask Detection Demo",  # 標題
+        title="Face Mask Detection Demo",
         description="""
         ### 口罩偵測系統
         上傳包含人臉的圖片，系統會自動偵測並判斷是否配戴口罩。
 
         **功能特色:**
-        - 🔍 自動人臉偵測
-        - 😷 口罩配戴判斷
-        - 📊 多人臉同時分析
-        - 🎯 信心度顯示
+        - 自動人臉偵測
+        - 口罩配戴判斷
+        - 多人臉同時分析
+        - 信心度顯示
 
         **使用說明:**
         1. 上傳圖片（支援 JPG, PNG）
@@ -257,16 +346,21 @@ def create_demo(model_path):
         **訓練資料:** Kaggle Face Mask 12K Dataset
         **模型架構:** Custom CNN / VGG19
         **準確率:** ~99.75%
-        """,  # 說明文字
+        """,
+
+        # --- CSS 樣式 ---
+        css="""
+        textarea {
+            font-size: 1.2rem !important;
+            line-height: 1.6 !important;
+        }
+        """,
 
         # --- 其他設定 ---
-        examples=examples if examples else None,  # 範例圖片
-        theme=gr.themes.Soft(),  # 使用柔和主題
-        allow_flagging="never"  # 不顯示回報按鈕
+        examples=examples if examples else None
     )
 
     return demo
-
 
 def main():
     """
@@ -299,26 +393,23 @@ def main():
     # ===== 步驟 2: 檢查模型檔案是否存在 =====
     # 如果沒有訓練過模型，模型檔案不存在，要提醒使用者先訓練
     if not os.path.exists(args.model):
-        print(f"❌ 找不到模型: {args.model}")
+        print(f"[ERROR] 找不到模型: {args.model}")
         print(f"")
         print(f"請先執行訓練: python train.py")
         print(f"或指定其他模型: python demo.py --model <模型路徑>")
         return  # 結束程式
 
     # ===== 步驟 3: 建立 Gradio 介面 =====
-    print(f"🚀 啟動 Gradio Demo...")
-    print(f"📦 使用模型: {args.model}")
+    print(f"[START] 啟動 Gradio Demo...")
+    print(f"[INFO] 使用模型: {args.model}")
     demo = create_demo(args.model)
 
     # ===== 步驟 4: 啟動網頁伺服器 =====
     demo.launch(
-        share=args.share,  # 是否產生公開連結（Gradio 會提供一個臨時網址）
-        server_port=args.port,  # Port 號
-        server_name="0.0.0.0"  # 允許從任何 IP 訪問（包括本機和區域網路）
-    )
-    # 啟動後會顯示：Running on local URL:  http://127.0.0.1:7860
-    # 在瀏覽器開啟這個網址就可以使用了！
-
+    share=args.share,
+    server_port=args.port,
+    css="textarea { font-size: 1.5rem !important; }"
+)
 
 # ===== 程式進入點 =====
 # 當執行 "python demo.py" 時，Python 會從這裡開始執行

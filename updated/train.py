@@ -1,10 +1,225 @@
 """
-Face Mask Detection - Training Script
-使用 CNN 或 VGG19 訓練口罩偵測模型
+===============================================================================
+專案名稱: Face Mask Detection - Model Training Script
+口罩偵測模型訓練程式
+===============================================================================
 
-用法:
+[程式功能]
+這個程式用於訓練口罩偵測的深度學習模型。支援兩種架構：
+1. Custom CNN - 自訂卷積神經網路
+2. VGG19 - 遷移學習（Transfer Learning）
+
+[支援的模型]
+1. CNN (Custom Convolutional Neural Network)
+   - 自行設計的輕量級 CNN 架構
+   - 參數量較少，訓練速度快
+   - 適合資源受限環境
+   - 準確率: ~99.75%
+
+2. VGG19 (Transfer Learning)
+   - 使用 ImageNet 預訓練權重
+   - 凍結前面層，只訓練分類頭
+   - 利用預訓練特徵，泛化能力強
+   - 準確率: ~99.50%
+
+[資料集需求]
+資料集結構:
+    data/
+        ├── train/
+        │   ├── WithMask/        # 有戴口罩的圖片
+        │   └── WithoutMask/     # 沒戴口罩的圖片
+        └── validation/
+            ├── WithMask/
+            └── WithoutMask/
+
+資料集來源: Kaggle Face Mask 12K Dataset
+- 訓練集: ~10,000 張圖片
+- 驗證集: ~2,000 張圖片
+
+[資料增強技術]
+使用 ImageDataGenerator 進行即時資料增強:
+1. rotation_range=20 - 隨機旋轉 ±20 度
+2. width_shift_range=0.2 - 水平平移 20%
+3. height_shift_range=0.2 - 垂直平移 20%
+4. shear_range=0.2 - 剪切變換
+5. zoom_range=0.2 - 隨機縮放 ±20%
+6. horizontal_flip=True - 隨機水平翻轉
+7. brightness_range=[0.8, 1.2] - 亮度調整
+8. fill_mode='nearest' - 填充模式
+9. samplewise_center=True - 樣本中心化
+10. samplewise_std_normalization=True - 樣本標準化
+
+為何需要資料增強:
+- 增加訓練資料多樣性
+- 防止過擬合
+- 提升模型泛化能力
+- 模擬不同拍攝條件（角度、光線、距離）
+
+[訓練參數]
+CNN 模型建議:
+- epochs: 32-50
+- batch_size: 32
+- learning_rate: 0.001 (Adam optimizer)
+- image_size: 256x256
+
+VGG19 模型建議:
+- epochs: 20-30
+- batch_size: 16 (較大模型需更小 batch)
+- learning_rate: 0.0001 (較小 LR 避免破壞預訓練權重)
+- image_size: 256x256
+
+[訓練技巧]
+1. Early Stopping:
+   - 監控 val_loss
+   - patience=5（連續 5 個 epoch 無改善則停止）
+   - 避免過度訓練
+
+2. Model Checkpoint:
+   - 自動儲存最佳模型
+   - 監控 val_accuracy
+   - 只保留最高準確率的模型
+
+3. Learning Rate Scheduling:
+   - 訓練後期降低學習率
+   - 幫助收斂到更好的最優解
+
+[啟動方式]
+訓練 CNN 模型（推薦）:
     python train.py --model cnn --epochs 32
+
+訓練 VGG19 模型:
     python train.py --model vgg19 --epochs 20
+
+自訂參數:
+    python train.py --model cnn --epochs 50 --batch-size 16
+
+[訓練流程]
+1. 檢查/下載資料集
+2. 建立資料生成器（含資料增強）
+3. 建立模型架構
+4. 編譯模型（optimizer, loss, metrics）
+5. 設定 callbacks（EarlyStopping, ModelCheckpoint）
+6. 開始訓練
+7. 儲存模型和訓練歷史
+8. 繪製訓練曲線
+
+[輸出檔案]
+訓練完成後會產生:
+results/models/
+    ├── cnn_best_model.h5       # CNN 最佳模型
+    ├── vgg19_best_model.h5     # VGG19 最佳模型
+    ├── cnn_history.pkl         # CNN 訓練歷史
+    └── vgg19_history.pkl       # VGG19 訓練歷史
+
+results/plots/
+    ├── cnn_training_curves.png    # CNN 訓練曲線
+    └── vgg19_training_curves.png  # VGG19 訓練曲線
+
+[CNN 架構設計]
+自訂 CNN 架構（範例）:
+```
+Conv2D(32) → ReLU → MaxPooling
+Conv2D(64) → ReLU → MaxPooling
+Conv2D(128) → ReLU → MaxPooling
+Flatten
+Dense(512) → ReLU → Dropout(0.5)
+Dense(1) → Sigmoid
+```
+
+設計考量:
+- 漸進增加通道數（32→64→128）
+- 使用 MaxPooling 降低空間維度
+- Dropout 防止過擬合
+- Sigmoid 輸出二分類機率
+
+[VGG19 遷移學習]
+架構:
+```
+VGG19 (pretrained, frozen) → 預訓練的卷積基礎
+Flatten
+Dense(512) → ReLU → Dropout(0.5)  → 自訂分類頭
+Dense(1) → Sigmoid
+```
+
+遷移學習策略:
+1. 載入 ImageNet 預訓練權重
+2. 凍結所有 VGG19 層（trainable=False）
+3. 只訓練新增的分類層
+4. 利用 VGG19 學到的通用特徵
+
+優勢:
+- 收斂快（預訓練特徵已經很好）
+- 需要較少訓練資料
+- 泛化能力強
+
+[訓練監控]
+訓練過程中會顯示:
+```
+Epoch 1/32
+312/312 [======] - 45s 145ms/step - loss: 0.1234 - accuracy: 0.9567 - val_loss: 0.0987 - val_accuracy: 0.9701
+```
+
+關鍵指標:
+- loss: 訓練損失（越低越好）
+- accuracy: 訓練準確率（越高越好）
+- val_loss: 驗證損失（最重要，判斷過擬合）
+- val_accuracy: 驗證準確率（最終評估指標）
+
+過擬合判斷:
+- training accuracy >> validation accuracy
+- training loss << validation loss
+- 解決方案: 增加 Dropout、資料增強、Early Stopping
+
+[GPU 加速]
+自動偵測並使用 GPU:
+- 有 GPU: 訓練速度快 10-50 倍
+- 無 GPU: CPU 訓練（較慢但可行）
+
+查看 GPU 使用:
+```python
+print(tf.config.list_physical_devices('GPU'))
+```
+
+[預處理一致性]
+重要: 訓練和推論的預處理必須一致！
+
+訓練時使用:
+- samplewise_center=True
+- samplewise_std_normalization=True
+
+推論時也必須使用相同預處理（demo.py 已包含）
+
+[面試討論重點]
+1. **模型選擇**: 說明為何嘗試兩種架構（輕量 vs 預訓練）
+2. **資料增強**: 解釋各種增強技術的作用
+3. **遷移學習**: VGG19 如何利用 ImageNet 知識
+4. **過擬合防止**: Dropout, Early Stopping, 資料增強
+5. **訓練技巧**: Learning rate, batch size 的選擇考量
+
+[常見問題]
+Q: 為何 VGG19 有時準確率反而較低？
+A: VGG19 參數多，容易過擬合小資料集。需要更多 Dropout 和資料增強。
+
+Q: 訓練多久會收斂？
+A: CNN 約 20-30 epochs，VGG19 約 10-15 epochs（預訓練加速收斂）
+
+Q: 如何進一步提升準確率？
+A: 1) 增加訓練資料 2) 嘗試其他預訓練模型（EfficientNet, ResNet）
+   3) 調整超參數 4) Ensemble 多個模型
+
+[資料集自動下載]
+程式包含自動下載功能:
+- 檢查 data/ 目錄是否存在
+- 如不存在，自動從 Kaggle 下載
+- 解壓縮到正確位置
+- 需要 kaggle API token（~/.kaggle/kaggle.json）
+
+[開發者]
+碩士班課程專案 - 深度學習
+建立日期: 2024
+更新日期: 2026-03-10 (修正 emoji 編碼、自動下載功能)
+
+===============================================================================
 """
 # ==================== 匯入必要套件 ====================
 import argparse  # 用於處理命令列參數
@@ -17,6 +232,101 @@ from tensorflow.keras import layers  # 神經網路層
 from tensorflow.keras.preprocessing.image import ImageDataGenerator  # 圖片資料增強工具
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint  # 訓練過程的回調函數
 import matplotlib.pyplot as plt  # 繪圖工具
+import shutil  # 檔案操作
+
+
+def auto_download_dataset():
+    """自動下載資料集（如果不存在）"""
+    data_dir = "data"
+    train_dir = os.path.join(data_dir, "train")
+    val_dir = os.path.join(data_dir, "val")
+
+    # 檢查資料夾結構是否正確（需要 train 和 val 資料夾）
+    if os.path.exists(train_dir) and os.path.exists(val_dir):
+        print(f"[OK] 資料集已存在: {data_dir}")
+        return True
+
+    # 檢查是否需要調整資料夾結構
+    dataset_folder = os.path.join(data_dir, "Face Mask Dataset")
+    if os.path.exists(dataset_folder):
+        print("[INFO] 偵測到未調整的資料夾結構，開始調整...")
+        train_src = os.path.join(dataset_folder, "Train")
+        test_src = os.path.join(dataset_folder, "Test")
+
+        if os.path.exists(train_src):
+            shutil.move(train_src, train_dir)
+            print("  [OK] Train -> train")
+        if os.path.exists(test_src):
+            shutil.move(test_src, val_dir)
+            print("  [OK] Test -> val")
+
+        # 刪除空的 Face Mask Dataset 資料夾
+        try:
+            os.rmdir(dataset_folder)
+        except:
+            pass
+
+        print("[OK] 資料夾結構調整完成")
+        return True
+
+    print("[INFO] 資料集不存在，開始自動下載...")
+
+    try:
+        import kagglehub
+        print("[DOWNLOAD] 下載中...（第一次下載約需5-10分鐘）")
+
+        # 下載資料集
+        path = kagglehub.dataset_download("ashishjangra27/face-mask-12k-images-dataset")
+        print(f"[OK] 下載完成: {path}")
+
+        # 建立 data 資料夾
+        os.makedirs(data_dir, exist_ok=True)
+
+        # 複製檔案到專案
+        for item in os.listdir(path):
+            src = os.path.join(path, item)
+            dst = os.path.join(data_dir, item)
+
+            if os.path.isdir(src):
+                if os.path.exists(dst):
+                    shutil.rmtree(dst)
+                shutil.copytree(src, dst)
+                print(f"  [OK] {item}")
+
+        # 調整資料夾結構
+        # Kaggle 資料集結構: data/Face Mask Dataset/Train, Test
+        # 需要的結構: data/train, data/val
+        dataset_folder = os.path.join(data_dir, "Face Mask Dataset")
+        if os.path.exists(dataset_folder):
+            print("[INFO] 調整資料夾結構...")
+            train_src = os.path.join(dataset_folder, "Train")
+            test_src = os.path.join(dataset_folder, "Test")
+            train_dst = os.path.join(data_dir, "train")
+            val_dst = os.path.join(data_dir, "val")
+
+            if os.path.exists(train_src):
+                shutil.move(train_src, train_dst)
+                print("  [OK] Train -> train")
+            if os.path.exists(test_src):
+                shutil.move(test_src, val_dst)
+                print("  [OK] Test -> val")
+
+            # 刪除空的 Face Mask Dataset 資料夾
+            try:
+                os.rmdir(dataset_folder)
+            except:
+                pass
+
+        print("[OK] 資料集準備完成")
+        return True
+
+    except ImportError:
+        print("[ERROR] 需要安裝 kagglehub: pip install kagglehub")
+        return False
+    except Exception as e:
+        print(f"[ERROR] 下載失敗: {e}")
+        print("請手動下載資料集到 data/ 資料夾")
+        return False
 
 
 def build_cnn_model(input_shape=(256, 256, 3)):
@@ -151,7 +461,7 @@ def train(model_type='cnn', epochs=32, batch_size=16, data_dir='data'):
         batch_size: 每次訓練用幾張圖片
         data_dir: 資料集路徑
     """
-    print(f"🚀 開始訓練 {model_type.upper()} 模型...")
+    print(f"[START] 開始訓練 {model_type.upper()} 模型...")
 
     # ===== 步驟 1: 建立模型架構 =====
     if model_type == 'cnn':
@@ -168,7 +478,7 @@ def train(model_type='cnn', epochs=32, batch_size=16, data_dir='data'):
         metrics=['accuracy']  # 追蹤準確率
     )
 
-    print(f"📊 模型參數: {model.count_params():,}")  # 顯示模型有多少個參數需要訓練
+    print(f"[INFO] 模型參數: {model.count_params():,}")  # 顯示模型有多少個參數需要訓練
 
     # ===== 步驟 3: 載入訓練資料 =====
     train_gen, val_gen = prepare_data(data_dir, batch_size)
@@ -203,7 +513,7 @@ def train(model_type='cnn', epochs=32, batch_size=16, data_dir='data'):
 
     # ===== 步驟 6: 儲存最終模型 =====
     model.save(f'results/models/{model_type}_final_model.h5')
-    print(f"✅ 模型已儲存至 results/models/{model_type}_final_model.h5")
+    print(f"[OK] 模型已儲存至 results/models/{model_type}_final_model.h5")
 
     # ===== 步驟 7: 繪製訓練過程的曲線圖 =====
     plot_history(history, model_type)
@@ -245,7 +555,7 @@ def plot_history(history, model_type):
     # ===== 儲存圖表 =====
     plt.tight_layout()  # 自動調整子圖間距
     plt.savefig(f'results/plots/{model_type}_training_history.png', dpi=150)  # 儲存為圖片
-    print(f"📈 訓練曲線已儲存至 results/plots/{model_type}_training_history.png")
+    print(f"[OK] 訓練曲線已儲存至 results/plots/{model_type}_training_history.png")
 
 
 def main():
@@ -279,6 +589,11 @@ def main():
 
     args = parser.parse_args()  # 解析命令列參數
 
+    # ===== 檢查並下載資料集 =====
+    if not auto_download_dataset():
+        print("[ERROR] 無法準備資料集，訓練終止")
+        return
+
     # ===== 建立結果資料夾 =====
     # exist_ok=True 表示資料夾存在也不會報錯
     os.makedirs('results/models', exist_ok=True)  # 存放訓練好的模型
@@ -292,7 +607,7 @@ def main():
         data_dir=args.data_dir       # 資料集路徑
     )
 
-    print("🎉 訓練完成！")
+    print("[DONE] 訓練完成！")
 
 
 # ===== 程式進入點 =====
